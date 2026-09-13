@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+title: FlyEcho
+message: "If you use FlyEcho, please cite this repository and the underlying FlyWire publications."
+type: software
+authors:
+  - family-names: Mariscal Fernández
+    given-names: David
+version: 0.1.0
+date-released: 2026-09-14
+license: MIT
+repository-code: https://github.com/davidmariscalf/FlyEcho
+references:
+  - type: article
+    title: "Neuronal wiring diagram of an adult brain"
+    year: 2024
+    journal: Nature
+    doi: 10.1038/s41586-024-07558-y
+  - type: article
+    title: "Whole-brain annotation and multi-connectome cell typing of Drosophila"
+    year: 2024
+    journal: Nature
+    doi: 10.1038/s41586-024-07686-5
