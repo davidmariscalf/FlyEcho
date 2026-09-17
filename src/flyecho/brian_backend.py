@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .topology import edge_weight
+
 
 @dataclass(frozen=True)
 class Brian2Result:
@@ -91,11 +93,11 @@ def simulate_escape_network(
         return syn
 
     synapses = (
-        connect(lc4, gf, 0.95, "lc4_to_gf"),
-        connect(lplc2, gf, 1.05, "lplc2_to_gf"),
-        connect(gf, ttm, 3.0, "gf_to_ttm"),
-        connect(gf, psi, 3.0, "gf_to_psi"),
-        connect(psi, dlm, 3.0, "psi_to_dlm"),
+        connect(lc4, gf, edge_weight("LC4-like", "GF-like"), "lc4_to_gf"),
+        connect(lplc2, gf, edge_weight("LPLC2-like", "GF-like"), "lplc2_to_gf"),
+        connect(gf, ttm, edge_weight("GF-like", "TTMn-like"), "gf_to_ttm"),
+        connect(gf, psi, edge_weight("GF-like", "PSI-like"), "gf_to_psi"),
+        connect(psi, dlm, edge_weight("PSI-like", "DLMn-like"), "psi_to_dlm"),
     )
 
     groups = {
