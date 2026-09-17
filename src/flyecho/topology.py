@@ -43,13 +43,27 @@ def node_names() -> tuple[str, ...]:
     return tuple(node.name for node in ESCAPE_NODES)
 
 
+def edge_weight(pre: str, post: str) -> float:
+    for edge in ESCAPE_EDGES:
+        if edge.pre == pre and edge.post == post:
+            if edge.model_weight is None:
+                raise ValueError(f"Edge {pre!r} -> {post!r} has no model weight")
+            return edge.model_weight
+    raise KeyError(f"Unknown edge {pre!r} -> {post!r}")
+
+
 def validate_topology() -> None:
     names = set(node_names())
     if len(names) != len(ESCAPE_NODES):
         raise ValueError("Circuit node names must be unique")
+    seen: set[tuple[str, str]] = set()
     for edge in ESCAPE_EDGES:
         if edge.pre not in names or edge.post not in names:
             raise ValueError(f"Unknown node in edge {edge.pre!r} -> {edge.post!r}")
+        key = (edge.pre, edge.post)
+        if key in seen:
+            raise ValueError(f"Duplicate edge {edge.pre!r} -> {edge.post!r}")
+        seen.add(key)
         if edge.model_weight is not None and edge.model_weight < 0:
             raise ValueError("model_weight must be non-negative")
 
