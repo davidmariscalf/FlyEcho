@@ -42,6 +42,10 @@ def simulate_escape_network(
 ) -> Brian2Result:
     """Run the six-node escape motif in Brian2.
 
+    The NumPy code-generation target is selected only for the duration of this
+    small simulation. That keeps the optional backend portable and avoids C/C++
+    compilation overhead that is disproportionate for six neurons.
+
     This backend is a simulator cross-check and scaling path, not a claim that
     the normalized parameters are fitted Drosophila membrane properties.
     """
@@ -54,66 +58,72 @@ def simulate_escape_network(
         raise ValueError("input drives must be non-negative")
 
     b2 = _require_brian2()
-    b2.start_scope()
+    previous_codegen_target = b2.prefs.codegen.target
+    b2.prefs.codegen.target = "numpy"
 
-    eqs = """
-    dv/dt = (-v + drive) / tau : 1 (unless refractory)
-    drive : 1
-    tau : second
-    """
+    try:
+        b2.start_scope()
 
-    def neuron(name: str, tau_ms: float, refractory_ms: float):
-        group = b2.NeuronGroup(
-            1,
-            eqs,
-            threshold="v > 1",
-            reset="v = 0",
-            refractory=refractory_ms * b2.ms,
-            method="euler",
-            dt=dt_s * b2.second,
-            name=name,
+        eqs = """
+        dv/dt = (-v + drive) / tau : 1 (unless refractory)
+        drive : 1
+        tau : second
+        """
+
+        def neuron(name: str, tau_ms: float, refractory_ms: float):
+            group = b2.NeuronGroup(
+                1,
+                eqs,
+                threshold="v > 1",
+                reset="v = 0",
+                refractory=refractory_ms * b2.ms,
+                method="euler",
+                dt=dt_s * b2.second,
+                name=name,
+            )
+            group.tau = tau_ms * b2.ms
+            group.v = 0
+            group.drive = 0
+            return group
+
+        lc4 = neuron("lc4_like", 50.0, 20.0)
+        lplc2 = neuron("lplc2_like", 55.0, 20.0)
+        gf = neuron("gf_like", 25.0, 50.0)
+        ttm = neuron("ttmn_like", 15.0, 30.0)
+        psi = neuron("psi_like", 15.0, 30.0)
+        dlm = neuron("dlmn_like", 20.0, 30.0)
+        lc4.drive = lc4_drive
+        lplc2.drive = lplc2_drive
+
+        def connect(pre, post, jump: float, name: str):
+            syn = b2.Synapses(pre, post, on_pre=f"v_post += {jump}", name=name)
+            syn.connect()
+            return syn
+
+        synapses = (
+            connect(lc4, gf, edge_weight("LC4-like", "GF-like"), "lc4_to_gf"),
+            connect(lplc2, gf, edge_weight("LPLC2-like", "GF-like"), "lplc2_to_gf"),
+            connect(gf, ttm, edge_weight("GF-like", "TTMn-like"), "gf_to_ttm"),
+            connect(gf, psi, edge_weight("GF-like", "PSI-like"), "gf_to_psi"),
+            connect(psi, dlm, edge_weight("PSI-like", "DLMn-like"), "psi_to_dlm"),
         )
-        group.tau = tau_ms * b2.ms
-        group.v = 0
-        group.drive = 0
-        return group
 
-    lc4 = neuron("lc4_like", 50.0, 20.0)
-    lplc2 = neuron("lplc2_like", 55.0, 20.0)
-    gf = neuron("gf_like", 25.0, 50.0)
-    ttm = neuron("ttmn_like", 15.0, 30.0)
-    psi = neuron("psi_like", 15.0, 30.0)
-    dlm = neuron("dlmn_like", 20.0, 30.0)
-    lc4.drive = lc4_drive
-    lplc2.drive = lplc2_drive
+        groups = {
+            "LC4-like": lc4,
+            "LPLC2-like": lplc2,
+            "GF-like": gf,
+            "TTMn-like": ttm,
+            "PSI-like": psi,
+            "DLMn-like": dlm,
+        }
+        monitors = {name: b2.SpikeMonitor(group) for name, group in groups.items()}
 
-    def connect(pre, post, jump: float, name: str):
-        syn = b2.Synapses(pre, post, on_pre=f"v_post += {jump}", name=name)
-        syn.connect()
-        return syn
+        network = b2.Network(*groups.values(), *synapses, *monitors.values())
+        network.run(duration_s * b2.second)
 
-    synapses = (
-        connect(lc4, gf, edge_weight("LC4-like", "GF-like"), "lc4_to_gf"),
-        connect(lplc2, gf, edge_weight("LPLC2-like", "GF-like"), "lplc2_to_gf"),
-        connect(gf, ttm, edge_weight("GF-like", "TTMn-like"), "gf_to_ttm"),
-        connect(gf, psi, edge_weight("GF-like", "PSI-like"), "gf_to_psi"),
-        connect(psi, dlm, edge_weight("PSI-like", "DLMn-like"), "psi_to_dlm"),
-    )
-
-    groups = {
-        "LC4-like": lc4,
-        "LPLC2-like": lplc2,
-        "GF-like": gf,
-        "TTMn-like": ttm,
-        "PSI-like": psi,
-        "DLMn-like": dlm,
-    }
-    monitors = {name: b2.SpikeMonitor(group) for name, group in groups.items()}
-
-    network = b2.Network(*groups.values(), *synapses, *monitors.values())
-    network.run(duration_s * b2.second)
-
-    return Brian2Result(
-        duration_s=duration_s,
-        spike_counts={name: int(monitor.num_spikes) for name, monitor in monitors.items()},
-    )
+        return Brian2Result(
+            duration_s=duration_s,
+            spike_counts={name: int(monitor.num_spikes) for name, monitor in monitors.items()},
+        )
+    finally:
+        b2.prefs.codegen.target = previous_codegen_target
