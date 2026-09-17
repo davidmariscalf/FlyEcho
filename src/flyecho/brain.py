@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import math
 
 from .neurons import LIFNeuron
+from .topology import edge_weight
 from .tracking import TrackEstimate
 
 
@@ -18,6 +19,18 @@ class BrainState:
     psi_spike: bool
     dlm_spike: bool
     danger_score: float
+
+    @property
+    def jump_command(self) -> bool:
+        return self.ttm_spike
+
+    @property
+    def flight_command(self) -> bool:
+        return self.dlm_spike
+
+    @property
+    def motor_command(self) -> bool:
+        return self.jump_command or self.flight_command
 
 
 class FlyBrainController:
@@ -40,6 +53,13 @@ class FlyBrainController:
         max_ping_hz: float = 30.0,
         threat_hold_s: float = 0.20,
     ) -> None:
+        if min_ping_hz <= 0 or max_ping_hz <= 0:
+            raise ValueError("ping rates must be positive")
+        if min_ping_hz > max_ping_hz:
+            raise ValueError("min_ping_hz cannot exceed max_ping_hz")
+        if threat_hold_s < 0:
+            raise ValueError("threat_hold_s must be non-negative")
+
         self.min_ping_hz = min_ping_hz
         self.max_ping_hz = max_ping_hz
         self.threat_hold_s = threat_hold_s
@@ -70,6 +90,9 @@ class FlyBrainController:
         return proximity, closing, urgency, danger
 
     def step(self, track: TrackEstimate, dt_s: float) -> BrainState:
+        if dt_s <= 0:
+            raise ValueError("dt_s must be positive")
+
         proximity, closing, urgency, danger = self._drives(track)
 
         lc4_current = 0.18 + 1.45 * closing + 0.30 * urgency
@@ -81,19 +104,26 @@ class FlyBrainController:
         gf_current = (
             0.08
             + 0.35 * danger
-            + (0.95 if lc4_spike else 0.0)
-            + (1.05 if lplc2_spike else 0.0)
+            + (edge_weight("LC4-like", "GF-like") if lc4_spike else 0.0)
+            + (edge_weight("LPLC2-like", "GF-like") if lplc2_spike else 0.0)
         )
         gf_spike = self.gf.step(gf_current, dt_s)
 
         # GF branches into the jump pathway (TTMn) and the flight pathway
-        # (PSI -> DLMn). A strong transient preserves the command-like nature
-        # of the GF output without pretending to model mixed electrical and
-        # chemical synapses explicitly.
-        gf_motor_drive = 3.0 if gf_spike else 0.0
-        ttm_spike = self.ttm.step(gf_motor_drive, dt_s)
-        psi_spike = self.psi.step(gf_motor_drive, dt_s)
-        dlm_spike = self.dlm.step(3.0 if psi_spike else 0.0, dt_s)
+        # (PSI -> DLMn). The topology module is the single source of truth for
+        # normalized model weights; these are not measured synaptic strengths.
+        ttm_spike = self.ttm.step(
+            edge_weight("GF-like", "TTMn-like") if gf_spike else 0.0,
+            dt_s,
+        )
+        psi_spike = self.psi.step(
+            edge_weight("GF-like", "PSI-like") if gf_spike else 0.0,
+            dt_s,
+        )
+        dlm_spike = self.dlm.step(
+            edge_weight("PSI-like", "DLMn-like") if psi_spike else 0.0,
+            dt_s,
+        )
 
         if gf_spike:
             self._threat_left_s = self.threat_hold_s
