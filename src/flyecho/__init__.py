@@ -1,16 +1,27 @@
 """FlyEcho: Drosophila-inspired active sensing."""
 
-from .brain import FlyBrainController, BrainState
-from .sensor import EchoSimulator, EchoMeasurement
+from .annotations import FlyWireAnnotation, FlyWireAnnotations
+from .brain import BrainState, FlyBrainController
+from .connectome import Edge, FlyWireEdgeList
+from .sensor import EchoMeasurement, EchoSimulator
+from .topology import CircuitEdge, CircuitNode, ESCAPE_EDGES, ESCAPE_NODES
 from .tracking import RangeTracker, TrackEstimate
 
 __all__ = [
-    "FlyBrainController",
     "BrainState",
-    "EchoSimulator",
+    "CircuitEdge",
+    "CircuitNode",
+    "Edge",
     "EchoMeasurement",
+    "EchoSimulator",
+    "ESCAPE_EDGES",
+    "ESCAPE_NODES",
+    "FlyBrainController",
+    "FlyWireAnnotation",
+    "FlyWireAnnotations",
+    "FlyWireEdgeList",
     "RangeTracker",
     "TrackEstimate",
 ]
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
