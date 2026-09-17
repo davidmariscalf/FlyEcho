@@ -17,6 +17,7 @@ dev = ["pytest>=8.0"]
 hardware = ["pyserial>=3.5"]
 simulation = [
   "brian2>=2.9,<2.10; python_version < '3.12'",
+  "numpy>=1.23.5,<2.0; python_version < '3.12'",
   "brian2>=2.10.1; python_version >= '3.12'",
 ]
 connectome = [
