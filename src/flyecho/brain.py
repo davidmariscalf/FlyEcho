@@ -14,18 +14,24 @@ class BrainState:
     lc4_spike: bool
     lplc2_spike: bool
     gf_spike: bool
+    ttm_spike: bool
+    psi_spike: bool
+    dlm_spike: bool
     danger_score: float
 
 
 class FlyBrainController:
-    """Compact fly-inspired active-sensing circuit.
+    """Compact fly-inspired active-sensing and escape circuit.
 
     Biological inspiration: in Drosophila, LC4 and LPLC2 visual projection
     neurons encode complementary looming features and both make direct input
-    to the giant fiber (GF) escape neuron. Here we preserve that parallel
-    convergence motif while replacing vision with engineered echo-derived
-    features. This is a bio-inspired controller, not a literal simulation of
-    the fly's native sensory system.
+    to the giant fiber (GF) escape neuron. The GF then drives the jump motor
+    neuron (TTMn) and the peripherally synapsing interneuron (PSI); PSI relays
+    activity to dorsal longitudinal muscle motor neurons (DLMn).
+
+    FlyEcho preserves that circuit motif while replacing vision with engineered
+    echo-derived features. This is a bio-inspired controller, not a literal
+    simulation of the fly's native sensory system or biophysics.
     """
 
     def __init__(
@@ -37,9 +43,19 @@ class FlyBrainController:
         self.min_ping_hz = min_ping_hz
         self.max_ping_hz = max_ping_hz
         self.threat_hold_s = threat_hold_s
+
+        # Looming-feature abstraction and descending escape neuron.
         self.lc4 = LIFNeuron(tau_s=0.050, threshold=0.85, refractory_s=0.020)
         self.lplc2 = LIFNeuron(tau_s=0.055, threshold=0.85, refractory_s=0.020)
         self.gf = LIFNeuron(tau_s=0.025, threshold=0.72, refractory_s=0.050)
+
+        # Downstream escape pathway. These normalized parameters are chosen for
+        # robust signal propagation in the educational model; they are not
+        # fitted biophysical parameters for the named Drosophila cells.
+        self.ttm = LIFNeuron(tau_s=0.015, threshold=0.70, refractory_s=0.030)
+        self.psi = LIFNeuron(tau_s=0.015, threshold=0.70, refractory_s=0.030)
+        self.dlm = LIFNeuron(tau_s=0.020, threshold=0.70, refractory_s=0.030)
+
         self._threat_left_s = 0.0
 
     @staticmethod
@@ -70,6 +86,15 @@ class FlyBrainController:
         )
         gf_spike = self.gf.step(gf_current, dt_s)
 
+        # GF branches into the jump pathway (TTMn) and the flight pathway
+        # (PSI -> DLMn). A strong transient preserves the command-like nature
+        # of the GF output without pretending to model mixed electrical and
+        # chemical synapses explicitly.
+        gf_motor_drive = 3.0 if gf_spike else 0.0
+        ttm_spike = self.ttm.step(gf_motor_drive, dt_s)
+        psi_spike = self.psi.step(gf_motor_drive, dt_s)
+        dlm_spike = self.dlm.step(3.0 if psi_spike else 0.0, dt_s)
+
         if gf_spike:
             self._threat_left_s = self.threat_hold_s
         else:
@@ -86,5 +111,8 @@ class FlyBrainController:
             lc4_spike=lc4_spike,
             lplc2_spike=lplc2_spike,
             gf_spike=gf_spike,
+            ttm_spike=ttm_spike,
+            psi_spike=psi_spike,
+            dlm_spike=dlm_spike,
             danger_score=danger,
         )
