@@ -25,15 +25,18 @@ class RangeTracker:
         self._velocity = 0.0
 
     def update(self, time_s: float, distance_m: float) -> TrackEstimate:
-        if distance_m <= 0:
-            raise ValueError("distance_m must be positive")
+        if not math.isfinite(time_s):
+            raise ValueError("time_s must be finite")
+        if not math.isfinite(distance_m) or distance_m <= 0:
+            raise ValueError("distance_m must be finite and positive")
 
         if self._prev_t is not None and self._prev_d is not None:
             dt = time_s - self._prev_t
-            if dt > 1e-6:
-                raw_v = (distance_m - self._prev_d) / dt
-                a = self.velocity_alpha
-                self._velocity = a * raw_v + (1.0 - a) * self._velocity
+            if dt <= 1e-6:
+                raise ValueError("time_s must increase between samples")
+            raw_v = (distance_m - self._prev_d) / dt
+            a = self.velocity_alpha
+            self._velocity = a * raw_v + (1.0 - a) * self._velocity
 
         self._prev_t = time_s
         self._prev_d = distance_m
